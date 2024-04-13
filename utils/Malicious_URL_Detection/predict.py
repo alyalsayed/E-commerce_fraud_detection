@@ -5,13 +5,15 @@ import re
 from tld import get_tld
 import pandas as pd
 
+
 def preprocess_url(url):
     # Function to preprocess URL and extract features
     def having_ip_address(url):
         match = re.search(
             '(([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\.([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\.([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\.'
             '([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\/)|'  # IPv4
-            '((0x[0-9a-fA-F]{1,2})\\.(0x[0-9a-fA-F]{1,2})\\.(0x[0-9a-fA-F]{1,2})\\.(0x[0-9a-fA-F]{1,2})\\/)' # IPv4 in hexadecimal
+            # IPv4 in hexadecimal
+            '((0x[0-9a-fA-F]{1,2})\\.(0x[0-9a-fA-F]{1,2})\\.(0x[0-9a-fA-F]{1,2})\\.(0x[0-9a-fA-F]{1,2})\\/)'
             '(?:[a-fA-F0-9]{1,4}:){7}[a-fA-F0-9]{1,4}', url)  # Ipv6
         if match:
             return 1
@@ -135,25 +137,33 @@ def preprocess_url(url):
 
     return df
 
+
 def predict_url_type(url):
 
     with open('mul_url_xgb.pkl', 'rb') as f:
         model = pickle.load(f)
-
 
     # Preprocess the URL
     processed_url = preprocess_url(url)
 
     # Predict the type
     prediction = model.predict(processed_url)
-    print(prediction)
+    # print(prediction) #list
+
     # Convert numerical prediction back to category
-    labels = ['benign','defacement','malware','phishing']
+    labels = ['benign', 'defacement', 'malware', 'phishing']
     predicted_type = labels[prediction[0]]
 
     return predicted_type
+
 
 # Example usage
 url = input("Enter a URL: ")
 predicted_type = predict_url_type(url)
 print("Predicted type:", predicted_type)
+
+# test
+# http://www.824555.com/app/member/SportOption.php?uid=guest&langx=gb > malware
+# movies.yahoo.com/shop?d=hv&cf=info&id=1800340831  > benign
+# https://docs.google.com/spreadsheet/viewform?formkey=dGg2Z1lCUHlSdjllTVNRUW50TFIzSkE6MQ  > phishing
+# http://www.raci.it/component/user/reset.html > defacement
