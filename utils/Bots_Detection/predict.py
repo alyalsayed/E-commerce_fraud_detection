@@ -1,107 +1,68 @@
-# forest model gives greate results
-#
-# Load the input data
-import pickle
-import numpy as np
 import pandas as pd
+import pickle
+from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import StandardScaler
 
-# Load the trained scaler
-with open('scaler.pkl', 'rb') as scaler_file:
-    scaler = pickle.load(scaler_file)
 # Load the dataset
-raw_df = pd.read_csv("../../data/twitter_human_bots_dataset.csv", index_col=0)
+raw_df = pd.read_csv("../../data/ecommerce_human_bot.csv")
 
-# Extract the first two records as DataFrames
-input_data_1 = raw_df.iloc[[0]]
-input_data_2 = raw_df.iloc[[6710]]
+# Extract features from 'created_at'
+raw_df['created_at'] = pd.to_datetime(raw_df['created_at'])
+raw_df['created_year'] = raw_df['created_at'].dt.year
+raw_df['created_month'] = raw_df['created_at'].dt.month
+raw_df['created_day'] = raw_df['created_at'].dt.day
+raw_df['created_hour'] = raw_df['created_at'].dt.hour
 
+# Concatenate categorical columns into 'user_info'
+raw_df['user_info'] = raw_df['user_lang'] + "_" + raw_df['user_location']
+
+# Binary classifications for bots and boolean values
+raw_df['bot'] = raw_df['account_type'].apply(lambda x: 1 if x == 'bot' else 0)
+raw_df['has_default_profile'] = raw_df['has_default_profile'].astype(int)
+raw_df['has_default_profile_img'] = raw_df['has_default_profile_img'].astype(
+    int)
+raw_df['is_geo_enabled'] = raw_df['is_geo_enabled'].astype(int)
+
+# Drop individual categorical columns and other non-numeric columns
+raw_df.drop(columns=['user_lang', 'user_location',
+            'username', 'created_at', 'account_type'], inplace=True)
+
+# Define feature set X and target variable y
+X = raw_df.drop(['bot'], axis=1)
+y = raw_df['bot']
+
+# Load TF-IDF vectorizer
+tfidf_vectorizer = TfidfVectorizer(
+    min_df=1, stop_words='english', lowercase=True)
+
+# Fit TF-IDF vectorizer on 'user_info' column
+user_info_tfidf = tfidf_vectorizer.fit_transform(X['user_info'])
 
 # Load trained models
-model_names = ['knn', 'lr', 'gnb', 'tree', 'forest', 'xgb']
+model_names = ['knn', 'lr', 'tree', 'forest', 'xgb']
 loaded_models = []
 for name in model_names:
     with open(f'bots_detection_{name}_model.pkl', 'rb') as model_file:
         loaded_model = pickle.load(model_file)
         loaded_models.append(loaded_model)
 
+# Assume we have a single test record (first record from the dataset)
+test_record = X.iloc[[0]]
 
-def preprocess_and_feature_engineering(input_data):
-    # Create DataFrame from input data
-    df = pd.DataFrame(input_data)
+# Apply TF-IDF vectorizer on 'user_info' column of the test record
+test_record_features = tfidf_vectorizer.transform(test_record['user_info'])
 
-    # Binary classifications for bots and boolean values
-    df['bot'] = df['account_type'].apply(lambda x: 1 if x == 'bot' else 0)
-    df['default_profile'] = df['default_profile'].astype(int)
-    df['default_profile_image'] = df['default_profile_image'].astype(int)
-    df['geo_enabled'] = df['geo_enabled'].astype(int)
-    df['verified'] = df['verified'].astype(int)
+# Load the scaler
+with open('scaler.pkl', 'rb') as scaler_file:
+    scaler = pickle.load(scaler_file)
 
-    # datetime conversion
-    df['created_at'] = pd.to_datetime(df['created_at'])
-    # hour created
-    df['hour_created'] = pd.to_datetime(df['created_at']).dt.hour
+# Scale numeric columns of the test record
+numeric_cols = test_record.select_dtypes(include=['int64', 'float64']).columns
+test_record[numeric_cols] = scaler.transform(test_record[numeric_cols])
 
-    # Interesting features to look at:
-    df['avg_daily_followers'] = np.round(
-        (df['followers_count'] / df['account_age_days']), 3)
-    df['avg_daily_friends'] = np.round(
-        (df['followers_count'] / df['account_age_days']), 3)
-    df['avg_daily_favorites'] = np.round(
-        (df['followers_count'] / df['account_age_days']), 3)
-
-    # Log transformations for highly skewed data
-    df['friends_log'] = np.round(np.log(1 + df['friends_count']), 3)
-    df['followers_log'] = np.round(np.log(1 + df['followers_count']), 3)
-    df['favs_log'] = np.round(np.log(1 + df['favourites_count']), 3)
-    df['avg_daily_tweets_log'] = np.round(
-        np.log(1 + df['average_tweets_per_day']), 3)
-
-    # Possible interactive features
-    df['network'] = np.round(df['friends_log'] * df['followers_log'], 3)
-    df['tweet_to_followers'] = np.round(
-        np.log(1 + df['statuses_count']) * np.log(1 + df['followers_count']), 3)
-
-    # Log-transformed daily acquisition metrics for dist. plots
-    df['follower_acq_rate'] = np.round(
-        np.log(1 + (df['followers_count'] / df['account_age_days'])), 3)
-    df['friends_acq_rate'] = np.round(
-        np.log(1 + (df['friends_count'] / df['account_age_days'])), 3)
-    df['favs_rate'] = np.round(
-        np.log(1 + (df['favourites_count'] / df['account_age_days'])), 3)
-
-    return df
-
-
-# Preprocess and feature engineering
-df_input = preprocess_and_feature_engineering(input_data_2)
-print(df_input)
-# Select features
-features = [
-    'verified',
-    'geo_enabled',
-    'default_profile',
-    'default_profile_image',
-    'favourites_count',
-    'followers_count',
-    'friends_count',
-    'statuses_count',
-    'average_tweets_per_day',
-    'network',
-    'tweet_to_followers',
-    'follower_acq_rate',
-    'friends_acq_rate',
-    'favs_rate'
-]
-
-X_input = df_input[features]
-print(X_input)
-# Standardize the feature set
-
-X_input_scaled = scaler.transform(X_input)
-
-# Prediction
+# Predict using loaded models
+print("Predictions:")
 for model, name in zip(loaded_models, model_names):
-    prediction = model.predict(X_input_scaled)
+    prediction = model.predict(test_record_features)
     print(
         f"Prediction using {name} model: {'bot' if prediction[0] == 1 else 'human'}")
