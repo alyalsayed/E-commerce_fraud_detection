@@ -2,10 +2,26 @@ import pandas as pd
 import pickle
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import StandardScaler
+from scipy.sparse import hstack
+
+# Load the scaler
+with open('scaler.pkl', 'rb') as scaler_file:
+    scaler = pickle.load(scaler_file)
+
+# Load the TF-IDF vectorizer
+with open('vectorizer.pkl', 'rb') as vectorizer_file:
+    tfidf_vectorizer = pickle.load(vectorizer_file)
+
+# Load the trained models
+model_names = ['knn', 'lr', 'tree', 'forest', 'xgb']
+models = {}
+for name in model_names:
+    with open(f'bots_detection_{name}_model.pkl', 'rb') as model_file:
+        models[name] = pickle.load(model_file)
 
 # Load the dataset
 raw_df = pd.read_csv("../../data/ecommerce_human_bot.csv")
-
+raw_df = raw_df.iloc[[21]]
 # Extract features from 'created_at'
 raw_df['created_at'] = pd.to_datetime(raw_df['created_at'])
 raw_df['created_year'] = raw_df['created_at'].dt.year
@@ -16,53 +32,30 @@ raw_df['created_hour'] = raw_df['created_at'].dt.hour
 # Concatenate categorical columns into 'user_info'
 raw_df['user_info'] = raw_df['user_lang'] + "_" + raw_df['user_location']
 
-# Binary classifications for bots and boolean values
-raw_df['bot'] = raw_df['account_type'].apply(lambda x: 1 if x == 'bot' else 0)
-raw_df['has_default_profile'] = raw_df['has_default_profile'].astype(int)
-raw_df['has_default_profile_img'] = raw_df['has_default_profile_img'].astype(
-    int)
-raw_df['is_geo_enabled'] = raw_df['is_geo_enabled'].astype(int)
-
 # Drop individual categorical columns and other non-numeric columns
-raw_df.drop(columns=['user_lang', 'user_location',
-            'username', 'created_at', 'account_type'], inplace=True)
+raw_df.drop(columns=['user_id', 'user_lang', 'user_location',
+                     'username', 'created_at', 'account_type'], inplace=True)
 
-# Define feature set X and target variable y
-X = raw_df.drop(['bot'], axis=1)
-y = raw_df['bot']
+# Apply TF-IDF vectorizer only on 'user_info' column
+X_tfidf = tfidf_vectorizer.transform(raw_df['user_info'])
 
-# Load TF-IDF vectorizer
-tfidf_vectorizer = TfidfVectorizer(
-    min_df=1, stop_words='english', lowercase=True)
+# Scale numeric columns
+numeric_cols = raw_df.select_dtypes(include=['int64', 'float64']).columns
+X_numeric_scaled = scaler.transform(raw_df[numeric_cols])
 
-# Fit TF-IDF vectorizer on 'user_info' column
-user_info_tfidf = tfidf_vectorizer.fit_transform(X['user_info'])
+# Merge TF-IDF features with numeric columns
+X_final = hstack([X_tfidf, X_numeric_scaled])
 
-# Load trained models
-model_names = ['knn', 'lr', 'tree', 'forest', 'xgb']
-loaded_models = []
-for name in model_names:
-    with open(f'bots_detection_{name}_model.pkl', 'rb') as model_file:
-        loaded_model = pickle.load(model_file)
-        loaded_models.append(loaded_model)
+# Define a mapping for the labels
+label_map = {0: 'human', 1: 'bot'}
 
-# Assume we have a single test record (first record from the dataset)
-test_record = X.iloc[[0]]
+# Predict using each model
+for name, model in models.items():
+    predictions = model.predict(X_final)
+    # Map predictions to labels
+    predictions = [label_map[prediction] for prediction in predictions]
+    print(f"Model: {name}")
+    print("Predictions:", predictions[0])
+    print()
 
-# Apply TF-IDF vectorizer on 'user_info' column of the test record
-test_record_features = tfidf_vectorizer.transform(test_record['user_info'])
-
-# Load the scaler
-with open('scaler.pkl', 'rb') as scaler_file:
-    scaler = pickle.load(scaler_file)
-
-# Scale numeric columns of the test record
-numeric_cols = test_record.select_dtypes(include=['int64', 'float64']).columns
-test_record[numeric_cols] = scaler.transform(test_record[numeric_cols])
-
-# Predict using loaded models
-print("Predictions:")
-for model, name in zip(loaded_models, model_names):
-    prediction = model.predict(test_record_features)
-    print(
-        f"Prediction using {name} model: {'bot' if prediction[0] == 1 else 'human'}")
+print("Prediction Done Successfully...")
