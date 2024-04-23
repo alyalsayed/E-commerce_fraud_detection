@@ -21,9 +21,6 @@ raw_df['created_month'] = raw_df['created_at'].dt.month
 raw_df['created_day'] = raw_df['created_at'].dt.day
 raw_df['created_hour'] = raw_df['created_at'].dt.hour
 
-# Concatenate categorical columns into 'user_info'
-raw_df['user_info'] = raw_df['user_lang'] + "_" + raw_df['user_location']
-
 # Binary classifications for bots and boolean values
 raw_df['bot'] = raw_df['account_type'].apply(lambda x: 1 if x == 'bot' else 0)
 raw_df['has_default_profile'] = raw_df['has_default_profile'].astype(int)
@@ -43,30 +40,6 @@ y = raw_df['bot']
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, random_state=42)
 
-# Apply TF-IDF vectorizer only on 'user_info' column
-tfidf_vectorizer = TfidfVectorizer(
-    min_df=1, stop_words='english', lowercase=True)
-X_train_tfidf = tfidf_vectorizer.fit_transform(X_train['user_info'])
-X_test_tfidf = tfidf_vectorizer.transform(X_test['user_info'])
-
-# Scale numeric columns
-numeric_cols = X_train.select_dtypes(include=['int64', 'float64']).columns
-scaler = StandardScaler()
-X_train_numeric_scaled = scaler.fit_transform(X_train[numeric_cols])
-X_test_numeric_scaled = scaler.transform(X_test[numeric_cols])
-
-# Merge TF-IDF features with numeric columns
-X_train_final = hstack([X_train_tfidf, X_train_numeric_scaled])
-X_test_final = hstack([X_test_tfidf, X_test_numeric_scaled])
-
-# Save the vectorizer
-with open('vectorizer.pkl', 'wb') as vectorizer_file:
-    pickle.dump(tfidf_vectorizer, vectorizer_file)
-
-# Save the scaler
-with open('scaler.pkl', 'wb') as scaler_file:
-    pickle.dump(scaler, scaler_file)
-
 # Initialize models
 knn = KNeighborsClassifier(n_neighbors=5)
 lr = LogisticRegression(max_iter=1000)
@@ -80,8 +53,8 @@ model_list = [knn, lr, tree, forest, xgb]
 
 # Train and print accuracy for each model
 for model in model_list:
-    model.fit(X_train_final, y_train)
-    accuracy = model.score(X_train_final, y_train)
+    model.fit(X_train, y_train)
+    accuracy = model.score(X_train, y_train)
     print(f"Model: {type(model).__name__}")
     print(f"Accuracy: {accuracy:.5f}")
     print()
