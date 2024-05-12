@@ -32,6 +32,7 @@ raw_df['is_geo_enabled'] = raw_df['is_geo_enabled'].astype(int)
 raw_df.drop(columns=['user_id', 'user_lang', 'user_location',
                      'username', 'created_at', 'account_type'], inplace=True)
 
+
 # Define feature set X and target variable y
 X = raw_df.drop(['bot'], axis=1)
 y = raw_df['bot']

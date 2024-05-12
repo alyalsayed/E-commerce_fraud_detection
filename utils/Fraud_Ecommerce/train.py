@@ -5,6 +5,8 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
 import pickle
 import calendar
+import matplotlib.pyplot as plt
+from sklearn.metrics import roc_auc_score, auc, roc_curve, confusion_matrix, classification_report
 
 # Read the datasets
 user_info = pd.read_csv("../../data/new_fraud.csv")
@@ -97,3 +99,57 @@ print("Test Score:", round(test_score * 100, 2), "%")
 # Saving the trained model using pickle
 with open("fraudE_log_reg.pkl", "wb") as f:
     pickle.dump(logistic_regression, f)
+
+# Predict probabilities for class 1 (Fraud)
+y_prob = logistic_regression.predict_proba(X_test)[:, 1]
+
+# Calculate ROC curve and AUC
+fpr, tpr, thresholds = roc_curve(y_test, y_prob)
+roc_auc = roc_auc_score(y_test, y_prob)
+
+# Plot ROC curve
+plt.figure(figsize=(8, 6))
+plt.plot(fpr, tpr, color='darkorange', lw=2,
+         label='ROC curve (area = %0.2f)' % roc_auc)
+plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+plt.xlim([0.0, 1.0])
+plt.ylim([0.0, 1.05])
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Fraud_Ecommerce (ROC) Curve')
+plt.legend(loc="lower right")
+plt.tight_layout()
+
+# Save ROC curve plot
+plt.savefig('results/roc_curve.png')
+plt.close()
+
+# Print AUC score
+print("AUC:", roc_auc)
+
+# Confusion matrix
+y_pred = logistic_regression.predict(X_test)
+conf_matrix = confusion_matrix(y_test, y_pred)
+print("Confusion Matrix:\n", conf_matrix)
+
+# Classification report
+class_report = classification_report(y_test, y_pred, output_dict=True)
+class_report_df = pd.DataFrame(class_report).transpose()
+class_report_df.to_csv('results/classification_report.csv')
+
+# Save confusion matrix plot
+plt.figure(figsize=(8, 6))
+plt.imshow(conf_matrix, cmap=plt.cm.Blues)
+plt.title('Confusion Matrix')
+plt.colorbar()
+plt.xticks([0, 1], ['Not Fraud', 'Fraud'])
+plt.yticks([0, 1], ['Not Fraud', 'Fraud'])
+plt.xlabel('Predicted')
+plt.ylabel('Actual')
+plt.tight_layout()
+plt.savefig('results/confusion_matrix.png')
+plt.close()
+
+# Save classification report to a text file
+with open('results/classification_report.txt', 'w') as f:
+    f.write(classification_report(y_test, y_pred))
